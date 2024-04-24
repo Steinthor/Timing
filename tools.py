@@ -1,3 +1,4 @@
+from collections import deque
 from glob import glob
 import os
 import time
@@ -203,3 +204,27 @@ def get_files(folderpath: str = "",
         return [], return_value(MESSAGE_STATUS['FAIL'], "folderpath", folderpath, msg)
 
     return files, return_value(MESSAGE_STATUS['SUCCESS'])
+
+
+def binary_search_order(lst):
+    """
+    Given a list, reorders the list so that it is in an order similar to the order a binary search goes through the elements
+    """
+    if not lst:
+        return lst
+
+    result = []
+    queue = deque([(0, len(lst) - 1)])
+
+    while queue:
+        start, end = queue.popleft()
+        mid = (start + end) // 2
+        result.append(lst[mid])
+
+        if start <= mid - 1:
+            queue.append((start, mid - 1))
+
+        if mid + 1 <= end:
+            queue.append((mid + 1, end))
+
+    return result

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-from collections import deque
 import cv2
 import csv
 from dataclasses import dataclass, astuple
@@ -11,7 +10,7 @@ import numpy as np
 import os
 from typing import List, Any, Tuple, Dict, Optional
 
-from tools import get_files, make_boolean, measure_time, print_msg, return_value, MESSAGE_STATUS
+from tools import binary_search_order, get_files, make_boolean, measure_time, print_msg, return_value, MESSAGE_STATUS
 
 MONITOR_MAX_HZ = 61
 CAPTURE_FOLDERS = ["capture", "capture_faros", "capture_mocap", "session_", "raw_session_"] # needs to be sanitized
@@ -88,30 +87,6 @@ class Column:
 
     def __str__(self) -> str:
         return f"grey: {self.get_value(False)}, on: {self.get_value(True)}"
-
-
-def binary_search_order(lst):
-    """
-    Given a list, reorders the list so that it is in an order similar to the order a binary search goes through the elements
-    """
-    if not lst:
-        return lst
-
-    result = []
-    queue = deque([(0, len(lst) - 1)])
-
-    while queue:
-        start, end = queue.popleft()
-        mid = (start + end) // 2
-        result.append(lst[mid])
-
-        if start <= mid - 1:
-            queue.append((start, mid - 1))
-
-        if mid + 1 <= end:
-            queue.append((mid + 1, end))
-
-    return result
 
 
 def convert_sec_hz_to_float(value: float = 0,
@@ -710,19 +685,17 @@ def get_marker_images(inpath: str,
         generate more data
     """
 
-    marker_images = []
-    marker_path = []
+    images = {}
 
     files, reply = get_files(folderpath=inpath, filename_pattern=filename_pattern)
     if not files or reply['status'] != MESSAGE_STATUS['SUCCESS']:
-        return marker_images, marker_path, reply
+        return images, reply
 
     # loop through the images, find the ones with all four markers detected
     print_msg(f"detecting markers in {inpath}...", "BLUE")
     counter = 0
     markers_before_threshold = False
     marker_id_test = set((0, 1, 2, 3))
-    images = {}
     for file in files:
         if counter > FRAME_THRESHOLD and not markers_before_threshold:
             break
