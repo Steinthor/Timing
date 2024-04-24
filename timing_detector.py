@@ -1,23 +1,20 @@
 #!/usr/bin/env python3
 
 import argparse
+from collections import deque
 import cv2
 import csv
 from dataclasses import dataclass, astuple
 from glob import glob
+import math
 import numpy as np
 import os
 from typing import List, Any, Tuple, Dict, Optional
-from pprint import pprint
 
-from common.camera_tools import get_cam_type_files
-from common.config import MESSAGE_STATUS
-from common.time_utilities import timer_decorator
-from common.utilities import is_dir, is_file, make_boolean, print_msg, return_value
-from apps.motion_capture.mocap_calibration import CAPTURE_FOLDERS
-from apps.motion_capture.tools import MONITOR_MAX_HZ, binary_search_order, convert_sec_hz_to_float
+from tools import get_files, make_boolean, measure_time, print_msg, return_value, MESSAGE_STATUS
 
-FRAME_THRESHOLD = 50
+MONITOR_MAX_HZ = 61
+CAPTURE_FOLDERS = ["capture", "capture_faros", "capture_mocap", "session_", "raw_session_"] # needs to be sanitized
 IM_SIZE = 1000
 CELL_BOX_LOWER = 250
 CELL_BOX_HIGHER = IM_SIZE - CELL_BOX_LOWER
@@ -25,6 +22,7 @@ CELL_ROWS = 5
 CELL_COLUMNS = 6
 CELL_COL_HZ = 3
 CELL_COL_SEC = 3
+FRAME_THRESHOLD = 50
 
 CORRECTION_SAME_VALUE = 1
 CORRECTION_WRONG_VALUE = 2
@@ -90,6 +88,50 @@ class Column:
 
     def __str__(self) -> str:
         return f"grey: {self.get_value(False)}, on: {self.get_value(True)}"
+
+
+def binary_search_order(lst):
+    """
+    Given a list, reorders the list so that it is in an order similar to the order a binary search goes through the elements
+    """
+    if not lst:
+        return lst
+
+    result = []
+    queue = deque([(0, len(lst) - 1)])
+
+    while queue:
+        start, end = queue.popleft()
+        mid = (start + end) // 2
+        result.append(lst[mid])
+
+        if start <= mid - 1:
+            queue.append((start, mid - 1))
+
+        if mid + 1 <= end:
+            queue.append((mid + 1, end))
+
+    return result
+
+
+def convert_sec_hz_to_float(value: float = 0,
+                            sec: int = 0,
+                            hz: int = 0,
+                            max_hz: int = MONITOR_MAX_HZ) -> float:
+    """
+    given 'sec' and 'hz' returns a float where integer portion represents seconds,
+        and decimal portion represents a ratio of max_hz
+    given 'value' where integer portion is seconds, and decimal portion is a ratio of max_hz,
+        returns a float where integer value represents seconds,
+        and the decimal value represents a monitor frequency value in base 10,
+          example 1: seconds 42, frame 10, max_hz below 100: 42.1
+          example 2: seconds 42, frame 10, max_hz above 100, below 1000: 42.01
+    """
+    order_of_magnitude = math.ceil(math.log(max_hz, 10))
+    if value:
+        return int(value) + round(
+            (value - int(value)) * max_hz / (10**order_of_magnitude), order_of_magnitude)
+    return sec + hz / max_hz
 
 
 def get_pixel_value_interval(img: np.ndarray, cell: Cell, crop: int = 0) -> Tuple[Any, float, float]:
@@ -647,10 +689,11 @@ def write_timings_to_csv(folder_path: str, filename: str, timings: List[Any]) ->
     return return_value(MESSAGE_STATUS['SUCCESS'], message=msg)
 
 
-def get_marker_path(inpath: str,
+def get_marker_images(inpath: str,
                     aruco_detector: Any,
+                    filename_pattern: str = "*.png",
                     verbose: bool = False,
-                    debug: bool = False) -> Tuple[List[Dict[Any, Any]], List[str], Dict[str, Any]]:
+                    debug: bool = False) -> Tuple[Dict[Any, Any], Dict[str, Any]]:
     """
     Goes through subfolders of inpath, detects markers and returns the timings and filepath of the
     folder with the most found markers
@@ -667,87 +710,74 @@ def get_marker_path(inpath: str,
         generate more data
     """
 
-    if "camera.json" in inpath:
-        camera_files = [inpath]
-    else:
-        all_cameras = sorted(glob(os.path.join(inpath, "**", "camera.json"), recursive=True))
-        camera_files = set([
-            filepath for capture_folder in CAPTURE_FOLDERS for filepath in all_cameras
-            if capture_folder in filepath
-        ])
-
     marker_images = []
     marker_path = []
-    for campath in camera_files:
-        campath = os.path.dirname(campath)
 
-        files, reply = get_cam_type_files(campath, "color")
-        if not files or reply['status'] != MESSAGE_STATUS['SUCCESS']:
-            return marker_images, marker_path, reply
+    files, reply = get_files(folderpath=inpath, filename_pattern=filename_pattern)
+    if not files or reply['status'] != MESSAGE_STATUS['SUCCESS']:
+        return marker_images, marker_path, reply
 
-        # loop through the images, find the ones with all four markers detected
-        print_msg(f"detecting markers in {campath}...", "BLUE")
-        counter = 0
-        markers_before_threshold = False
-        marker_id_test = set((0, 1, 2, 3))
-        images = {}
-        for file in files:
-            if counter > FRAME_THRESHOLD and not markers_before_threshold:
-                break
-            counter += 1
-            img_raw = cv2.imread(file, cv2.IMREAD_GRAYSCALE)
+    # loop through the images, find the ones with all four markers detected
+    print_msg(f"detecting markers in {inpath}...", "BLUE")
+    counter = 0
+    markers_before_threshold = False
+    marker_id_test = set((0, 1, 2, 3))
+    images = {}
+    for file in files:
+        if counter > FRAME_THRESHOLD and not markers_before_threshold:
+            break
+        counter += 1
+        img_raw = cv2.imread(file, cv2.IMREAD_GRAYSCALE)
 
-            thresholds = binary_search_order(range(250, 100, -5))
-            for lower_threshold in thresholds[:10]:
-                found_markers = False
-                _, img_thresh = cv2.threshold(img_raw, lower_threshold, 255, cv2.THRESH_TOZERO)
+        thresholds = binary_search_order(range(250, 100, -5))
+        for lower_threshold in thresholds[:10]:
+            found_markers = False
+            _, img_thresh = cv2.threshold(img_raw, lower_threshold, 255, cv2.THRESH_TOZERO)
 
-                (corners, ids, rejected) = aruco_detector.detectMarkers(img_thresh)
-                if not corners:
-                    # if debug:
-                    # print_msg(f"No markers found in: {file}", "YELLOW")
-                    # cv2.aruco.drawDetectedMarkers(img_thresh, rejected)
-                    # cv2.imshow("rejected", img_thresh)
-                    # reply = cv2.waitKey()
-                    # if reply == ord('\x1b'):
-                    #     break
-                    continue
-                if len(corners) > 2:
-                    markers_before_threshold = True
-                if len(corners) < 4:
-                    continue
-                id_set = set(tuple(ids.ravel()))
-                if marker_id_test != id_set:
-                    if debug:
-                        print_msg("marker ids are not correct!", "YELLOW")
-                    continue
-                found_markers = True
-                break
-
-            if not found_markers:
-                if debug:
-                    print_msg(f"did not find markers in: {file}", "YELLOW")
+            (corners, ids, rejected) = aruco_detector.detectMarkers(img_thresh)
+            if not corners:
+                # if debug:
+                # print_msg(f"No markers found in: {file}", "YELLOW")
+                # cv2.aruco.drawDetectedMarkers(img_thresh, rejected)
+                # cv2.imshow("rejected", img_thresh)
+                # reply = cv2.waitKey()
+                # if reply == ord('\x1b'):
+                #     break
                 continue
+            if len(corners) > 2:
+                markers_before_threshold = True
+            if len(corners) < 4:
+                continue
+            id_set = set(tuple(ids.ravel()))
+            if marker_id_test != id_set:
+                if debug:
+                    print_msg("marker ids are not correct!", "YELLOW")
+                continue
+            found_markers = True
+            break
+
+        if not found_markers:
             if debug:
-                print_msg(f"found markers for file: {file}", "GREEN")
-            images[file] = {}
-            for corner, id in zip(corners, ids):
-                id = id[0]
-                images[file][id] = corner
-        if not images:
-            print_msg(f"no markers found in {campath}", "YELLOW")
+                print_msg(f"did not find markers in: {file}", "YELLOW")
             continue
+        if debug:
+            print_msg(f"found markers for file: {file}", "GREEN")
+        images[file] = {}
+        for corner, id in zip(corners, ids):
+            id = id[0]
+            images[file][id] = corner
+    if not images:
+        print_msg(f"no markers found in {inpath}", "YELLOW")
 
-        print_msg(f"found {len(images)} images with markers", "DARK_GREEN")
-        marker_images.append(images)
-        marker_path.append(campath)
+    print_msg(f"found {len(images)} images with markers", "DARK_GREEN" if len(images) > 0 else "YELLOW")
 
-    return marker_images, marker_path, return_value(MESSAGE_STATUS['SUCCESS'])
+    return images, return_value(MESSAGE_STATUS['SUCCESS'])
 
 
-@timer_decorator
+@measure_time
 def mocap_timing_detector(inpath: str,
                           template: str,
+                          filename_pattern: str = "*.png",
                           max_hz: int = MONITOR_MAX_HZ,
                           use_existing_raw: bool = True,
                           debug: bool = False,
@@ -770,13 +800,13 @@ def mocap_timing_detector(inpath: str,
     verbose:
         print additional information to console
     """
-    if not is_file(template):
+    if not os.path.isfile(template):
         msg = f"Error!  template: {template} not found"
         print_msg(msg, "RED")
         return return_value(MESSAGE_STATUS['FAIL'], "template", template, msg)
 
-    if use_existing_raw:
-        raw_files = sorted(glob(os.path.join(inpath, "**", "timings_raw.csv"), recursive=True))
+    raw_files = sorted(glob(os.path.join(inpath, "**", "timings_raw.csv"), recursive=True))
+    if use_existing_raw and raw_files:
         for raw_file in raw_files:
             timings = []
             # open the timings in a csv file.
@@ -873,102 +903,102 @@ def mocap_timing_detector(inpath: str,
         dict_template[id] = corner
 
     detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
-    all_marker_images, all_marker_path, reply = get_marker_path(inpath,
-                                                                aruco_detector=detector,
-                                                                verbose=verbose,
-                                                                debug=debug)
+    marker_images, reply = get_marker_images(inpath,
+                                             aruco_detector=detector,
+                                             filename_pattern=filename_pattern,
+                                             verbose=verbose,
+                                             debug=debug)
     if reply['status'] != MESSAGE_STATUS['SUCCESS']:
         return reply
 
-    for marker_images, marker_path in zip(all_marker_images, all_marker_path):
-        # get the marker corners with the smallest transformation error
-        error_opt = np.inf
-        H_opt = np.identity(3)
-        timings = []
-        for f, params in marker_images.items():
-            dst_pts = []
-            src_pts = []
-            src_id = []
-            if f == template:
-                continue
-            count_corners = 0
-            for id, corner in params.items():
-                dst_pts.extend([p for a in dict_template[id] for b in a for p in b])
-                src_pts.extend([p for a in corner for b in a for p in b])
-                src_id.extend([id])
-                count_corners += 1
-            if count_corners < 4:
-                print_msg(f"Warning!  found only {count_corners} markers", "YELLOW")
+    # get the marker corners with the smallest transformation error
+    error_opt = np.inf
+    H_opt = np.identity(3)
+    timings = []
+    for f, params in marker_images.items():
+        dst_pts = []
+        src_pts = []
+        src_id = []
+        if f == template:
+            continue
+        count_corners = 0
+        for id, corner in params.items():
+            dst_pts.extend([p for a in dict_template[id] for b in a for p in b])
+            src_pts.extend([p for a in corner for b in a for p in b])
+            src_id.extend([id])
+            count_corners += 1
+        if count_corners < 4:
+            print_msg(f"Warning!  found only {count_corners} markers", "YELLOW")
 
-            dst_pts = np.array(dst_pts, dtype=np.float32).reshape((-1, 1, 2))
-            src_pts = np.array(src_pts, dtype=np.float32).reshape((-1, 1, 2))
-            src_id = np.array(src_id)
-            H, mask = cv2.findHomography(
-                srcPoints=src_pts,
-                dstPoints=dst_pts,
-                method=cv2.LMEDS,  # [cv2.LMEDS (def), cv2.RANSAC, cv2.RHO]
-                ransacReprojThreshold=1.0,  # def: 3
-                maxIters=4000,  # def: 2000
-                confidence=0.9995)  # def: 0.995
+        dst_pts = np.array(dst_pts, dtype=np.float32).reshape((-1, 1, 2))
+        src_pts = np.array(src_pts, dtype=np.float32).reshape((-1, 1, 2))
+        src_id = np.array(src_id)
+        H, mask = cv2.findHomography(
+            srcPoints=src_pts,
+            dstPoints=dst_pts,
+            method=cv2.LMEDS,  # [cv2.LMEDS (def), cv2.RANSAC, cv2.RHO]
+            ransacReprojThreshold=1.0,  # def: 3
+            maxIters=4000,  # def: 2000
+            confidence=0.9995)  # def: 0.995
 
-            # if debug:
-            #     img_raw = cv2.imread(f, cv2.IMREAD_GRAYSCALE)
-            #     img_timer = cv2.warpPerspective(img_raw, H, (img_tpl.shape[1], img_tpl.shape[0]), flags=cv2.INTER_LINEAR)
-            #     img_timer_3C = cv2.cvtColor(img_timer, cv2.COLOR_GRAY2RGB)
-            #     src_id = np.array([[i] for i in range(3, -1, -1)])
-            #     src_markers = np.split(np.array(src_pts, dtype=np.float32).ravel().reshape((-1, 4, 2)), count_corners)
-            #     cv2.aruco.drawDetectedMarkers(img_raw, src_markers)
-            #     cv2.imshow("src", img_raw)
+        # if debug:
+        #     img_raw = cv2.imread(f, cv2.IMREAD_GRAYSCALE)
+        #     img_timer = cv2.warpPerspective(img_raw, H, (img_tpl.shape[1], img_tpl.shape[0]), flags=cv2.INTER_LINEAR)
+        #     img_timer_3C = cv2.cvtColor(img_timer, cv2.COLOR_GRAY2RGB)
+        #     src_id = np.array([[i] for i in range(3, -1, -1)])
+        #     src_markers = np.split(np.array(src_pts, dtype=np.float32).ravel().reshape((-1, 4, 2)), count_corners)
+        #     cv2.aruco.drawDetectedMarkers(img_raw, src_markers)
+        #     cv2.imshow("src", img_raw)
 
-            # convert the src_pts with H and display them on the img_timer
-            # if debug:
-            #     dst_markers = np.split(np.array(dst_pts, dtype=np.float32).ravel().reshape((-1, 4, 2)), count_corners)
-            #     cv2.aruco.drawDetectedMarkers(img_timer_3C, dst_markers, src_id, borderColor=(255, 0, 0))
-            timer_src = cv2.perspectiveTransform(src=src_pts, m=H)
-            error = np.sum(abs(timer_src - dst_pts))
-            if error < error_opt:
-                error_opt = error
-                H_opt = H
+        # convert the src_pts with H and display them on the img_timer
+        # if debug:
+        #     dst_markers = np.split(np.array(dst_pts, dtype=np.float32).ravel().reshape((-1, 4, 2)), count_corners)
+        #     cv2.aruco.drawDetectedMarkers(img_timer_3C, dst_markers, src_id, borderColor=(255, 0, 0))
+        timer_src = cv2.perspectiveTransform(src=src_pts, m=H)
+        error = np.sum(abs(timer_src - dst_pts))
+        if error < error_opt:
+            error_opt = error
+            H_opt = H
 
-            # if debug:
-            #     src_markers = np.split(np.array(timer_src, dtype=np.float32).ravel().reshape((-1, 4, 2)), count_corners)
-            #     cv2.aruco.drawDetectedMarkers(img_timer_3C, src_markers, src_id)
-            #     cv2.imshow("dst", img_timer_3C)
-            #     user_input = cv2.waitKey()
-            #     if user_input == ord('\x1b'):
-            #         break  # '\x1b': escape key
-        print_msg(f"smallest error (summed absolute distance from template corner coordinates): {error_opt}",
-                  "DARK_GREEN")
+        # if debug:
+        #     src_markers = np.split(np.array(timer_src, dtype=np.float32).ravel().reshape((-1, 4, 2)), count_corners)
+        #     cv2.aruco.drawDetectedMarkers(img_timer_3C, src_markers, src_id)
+        #     cv2.imshow("dst", img_timer_3C)
+        #     user_input = cv2.waitKey()
+        #     if user_input == ord('\x1b'):
+        #         break  # '\x1b': escape key
+    print_msg(f"smallest error (summed absolute distance from template corner coordinates): {error_opt}",
+                "DARK_GREEN")
 
-        print_msg(f"Get timings from images in {marker_path}...", "BLUE")
-        files, reply = get_cam_type_files(marker_path, "color")
-        for file in files:
-            seconds, hertz, user_input, reply = get_time(file,
-                                                         H_opt, (img_tpl.shape[1], img_tpl.shape[0]),
-                                                         debug=debug,
-                                                         verbose=verbose)
-            if reply['status'] != MESSAGE_STATUS['SUCCESS']:
-                return reply
-            timings.append([os.path.basename(file), seconds, hertz, 0])
-            if user_input == ord('\x1b'):
-                break  # '\x1b': escape key
+    print_msg(f"Get timings from images in {inpath}...", "BLUE")
+    for file in marker_images.keys():
+        seconds, hertz, user_input, reply = get_time(file,
+                                                     H_opt, (img_tpl.shape[1], img_tpl.shape[0]),
+                                                     debug=debug,
+                                                     verbose=verbose)
+        if reply['status'] != MESSAGE_STATUS['SUCCESS']:
+            return reply
+        timings.append([os.path.basename(file), seconds, hertz, 0])
+        if user_input == ord('\x1b'):
+            break  # '\x1b': escape key
 
-        write_timings_to_csv(marker_path, "timings_raw.csv", timings)
-        # do some error checking on the timing result using adjacent time result as a reference
-        timings, reply = fix_time_errors(timings)
-        if reply['status'] == MESSAGE_STATUS['SUCCESS']:
-            write_timings_to_csv(marker_path, "timings.csv", timings)
-        else:
-            print_msg(f"Warning!  'timings.csv not written to: {marker_path}", "YELLOW")
+    write_timings_to_csv(inpath, "timings_raw.csv", timings)
+    # do some error checking on the timing result using adjacent time result as a reference
+    timings, reply = fix_time_errors(timings)
+    if reply['status'] == MESSAGE_STATUS['SUCCESS']:
+        write_timings_to_csv(inpath, "timings.csv", timings)
+    else:
+        print_msg(f"Warning!  'timings.csv not written to: {inpath}", "YELLOW")
 
     return return_value(MESSAGE_STATUS['SUCCESS'], message="mocap_timing_detector ran successfully")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="generate timings.csv from detecting the mocap timing app in images",
+        description="generates timings.csv in 'inpath' from detecting the timing app in images",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-i", "--inpath", type=str, required=True, help="path to folder with timing images")
+    parser.add_argument("--pattern", type=str, default="*.png", help="a 'glob' consumable filename pattern")
     parser.add_argument("--template", type=str, required=True, help="filepath to template image")
     parser.add_argument("--max_hz", type=int, default=MONITOR_MAX_HZ, help="maximum frequency of the monitor")
     parser.add_argument("--use_existing_raw",
@@ -989,6 +1019,7 @@ def main() -> None:
 
     reply = mocap_timing_detector(inpath=args.inpath,
                                   template=args.template,
+                                  filename_pattern=args.pattern,
                                   max_hz=args.max_hz,
                                   use_existing_raw=args.use_existing_raw,
                                   debug=args.debug,
