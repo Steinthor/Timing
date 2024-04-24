@@ -19,4 +19,3 @@ Version: 0.0.1
 ### Installation
 
 1. run "build.sh" script to build and install the app
-
