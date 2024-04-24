@@ -18,7 +18,5 @@ Version: 0.0.1
 
 ### Installation
 
-1. create a "build" folder under the root directory of this repository
-2. run ''cmake -g Ninja ..''
-3. run ''ninja''
+1. run "build.sh" script to build and install the app
 
