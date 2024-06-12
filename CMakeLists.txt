@@ -1,9 +1,16 @@
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_BUILD_TYPE Debug)
-set(CMAKE_CXX_FLAGS "-O3 -Wall")
 cmake_minimum_required(VERSION 3.0)
 
-project(timing)
+project(timing VERSION 0.1.0)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_CXX_FLAGS "-O3 -Wall")
+
+include_directories(include)
+include_directories(GLFW)
+include_directories(external/stb)
+include_directories(external/GL)
+include_directories(external/imgui)
 
 set(OpenGL_GL_PREFERENCE "GLVND")
 find_package( OpenGL REQUIRED )
@@ -24,7 +31,8 @@ add_library( "imgui" "external/imgui/imgui.cpp"
                      "external/imgui/imgui_impl_opengl3.cpp" )
 
 set( GLFW-CMAKE-STARTER-SRC
-  timing.cpp
+  src/timing.cpp
+  src/version.cpp
 )
 
 add_executable( timing WIN32 ${GLFW-CMAKE-STARTER-SRC} )
