@@ -4,6 +4,8 @@ Timing app and detector script to sync cameras together
 
 Version: 0.0.1
 
+Tested on Ubuntu and WSL Ubuntu.
+
 ## Licences ##
 
 * external/GL: public domain
