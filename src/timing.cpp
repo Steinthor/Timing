@@ -141,14 +141,14 @@ int main(int argc, char *argv[])
     }
     else {
         for (auto i = 1; i < argc; ++i) {
-            std::cout << argv[i] << std::endl;
-            if (argv[i] == "--help") {
+            std::string argument = argv[i];
+            if (argument == "-h" || argument == "--help") {
                 std::cout << "./timing <argument>:" << std::endl;
-                std::cout << "  --help:  this helpful information." << std::endl;
+                std::cout << "  -h, --help:  this helpful information." << std::endl;
                 std::cout << "  -v, --version: prints version of Timing app." << std::endl;
                 std::cout << "  <filepath>: saves a template image usable with the detector." << std::endl;
             }
-            if (argv[i] == "-v" || argv[i] == "--version") {
+            if (argument == "-v" || argument == "--version") {
                 printVersion();
             }
         }

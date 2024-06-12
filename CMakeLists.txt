@@ -1,12 +1,13 @@
 cmake_minimum_required(VERSION 3.0)
 
-project(timing VERSION 0.1.0)
+project(timing VERSION 0.1.1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_FLAGS "-O3 -Wall")
 
 include_directories(include)
+include_directories(${CMAKE_BINARY_DIR}/generated)
 include_directories(GLFW)
 include_directories(external/stb)
 include_directories(external/GL)
@@ -37,6 +38,13 @@ set( GLFW-CMAKE-STARTER-SRC
 
 add_executable( timing WIN32 ${GLFW-CMAKE-STARTER-SRC} )
 target_link_libraries( timing ${OPENGL_LIBRARIES} glfw glew imgui)
+
+# Generate version.h file
+configure_file(
+    ${CMAKE_SOURCE_DIR}/include/version.h.in
+    ${CMAKE_BINARY_DIR}/generated/version.h
+    @ONLY
+)
 
 install(
   TARGETS
