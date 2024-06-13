@@ -130,29 +130,38 @@ void error_callback(int error, const char* description)
     fprintf(stderr, "Error: %s\n", description);
 }
 
+// Function to parse arguments, returns true if app should continue, else false
+bool parseArguments(int argc, char* argv[], bool& file_arg, bool& file_save) {
+    file_arg = (argc >= 2);
+    file_save = file_arg;
+
+    for (int i = 1; i < argc; ++i) {
+        std::string argument = argv[i];
+        if (argument == "-h" || argument == "--help") {
+            printHelp();
+            file_arg = false;
+            file_save = false;
+            return false; // Exit after printing help
+        }
+        else if (argument == "-v" || argument == "--version") {
+            printVersion();
+            file_arg = false;
+            file_save = false;
+            return false; // Exit after printing version
+        }
+        else {
+            std::cout << "File path specified: " << argument << "\n";
+            // Handle file path
+        }
+    }
+    return true;
+}
+
 int main(int argc, char *argv[])
 {
     bool file_arg = true;
     bool file_save = true;
-    if (argc < 2) {
-        file_arg = false;
-        file_save = false;
-    }
-    else {
-        for (auto i = 1; i < argc; ++i) {
-            std::string argument = argv[i];
-            if (argument == "-h" || argument == "--help") {
-                std::cout << "./timing <argument>:" << std::endl;
-                std::cout << "  -h, --help:  this helpful information." << std::endl;
-                std::cout << "  -v, --version: prints version of Timing app." << std::endl;
-                std::cout << "  <filepath>: saves a template image usable with the detector." << std::endl;
-            }
-            if (argument == "-v" || argument == "--version") {
-                printVersion();
-            }
-        }
-        return 0;
-    }
+    if (!parseArguments(argc, argv, file_arg, file_save)) return 0;
 
     GLFWwindow* window;
 
@@ -176,7 +185,7 @@ int main(int argc, char *argv[])
         glfwWindowHint( GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE );
 
         /* Create a windowed mode window and its OpenGL context */
-        window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Mocap Timing App", NULL, NULL);
+        window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Timing App", NULL, NULL);
         if (!window)
         {
             std::cout << "Failed to create GLFW window" << std::endl;
@@ -203,7 +212,7 @@ int main(int argc, char *argv[])
     const char* glsl_version = "#version 150";
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    // get images
+    // get corner marker images
     std::string filenames[4] = {"/usr/local/include/timing_marker0.png",
                                 "/usr/local/include/timing_marker1.png",
                                 "/usr/local/include/timing_marker2.png",
