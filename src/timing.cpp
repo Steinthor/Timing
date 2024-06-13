@@ -116,13 +116,13 @@ const char *fragmentShaderSource_texture = "#version 330 core\n"
 
 ImFont* AddDefaultFont( float pixel_size )
 {
-ImGuiIO &io = ImGui::GetIO();
-ImFontConfig config;
-config.SizePixels = pixel_size;
-config.OversampleH = config.OversampleV = 1;
-config.PixelSnapH = true;
-ImFont *font = io.Fonts->AddFontDefault(&config);
-return font;
+    ImGuiIO &io = ImGui::GetIO();
+    ImFontConfig config;
+    config.SizePixels = pixel_size;
+    config.OversampleH = config.OversampleV = 1;
+    config.PixelSnapH = true;
+    ImFont *font = io.Fonts->AddFontDefault(&config);
+    return font;
 }
 
 void error_callback(int error, const char* description)
@@ -135,7 +135,6 @@ int main(int argc, char *argv[])
     bool file_arg = true;
     bool file_save = true;
     if (argc < 2) {
-        std::cout << "Information: No filepath given. To save a template .png file, use './mocap_timing <filepath>'" << std::endl;
         file_arg = false;
         file_save = false;
     }
@@ -157,37 +156,38 @@ int main(int argc, char *argv[])
 
     GLFWwindow* window;
 
-    /* Initialize the gl3w library */
-    if (!gl3wInit()) {
-        std::cout << "Failed to initialize the gl3w library" << std::endl;
-        return -1;
+    { // initialize the window
+        /* Initialize the gl3w library */
+        if (!gl3wInit()) {
+            std::cout << "Failed to initialize the gl3w library" << std::endl;
+            return -1;
+        }
+
+        /* Initialize the glfw library */
+        if (!glfwInit()) {
+            std::cout << "Failed to initialize the glfw library" << std::endl;
+            return -1;
+        }
+
+        glfwSetErrorCallback(error_callback);
+
+        glfwWindowHint( GLFW_CONTEXT_VERSION_MAJOR, 3 );
+        glfwWindowHint( GLFW_CONTEXT_VERSION_MINOR, 3 );
+        glfwWindowHint( GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE );
+
+        /* Create a windowed mode window and its OpenGL context */
+        window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Mocap Timing App", NULL, NULL);
+        if (!window)
+        {
+            std::cout << "Failed to create GLFW window" << std::endl;
+            glfwTerminate();
+            return -1;
+        }
+
+        /* Make the window's context current */
+        glfwMakeContextCurrent(window);
+        glClearColor( 0.0f, 0.0f, 0.0f, 0.0f );
     }
-
-    /* Initialize the glfw library */
-    if (!glfwInit()) {
-        std::cout << "Failed to initialize the glfw library" << std::endl;
-        return -1;
-    }
-
-    glfwSetErrorCallback(error_callback);
-
-    glfwWindowHint( GLFW_CONTEXT_VERSION_MAJOR, 3 );
-    glfwWindowHint( GLFW_CONTEXT_VERSION_MINOR, 3 );
-    glfwWindowHint( GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE );
-
-    /* Create a windowed mode window and its OpenGL context */
-    window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Mocap Timing App", NULL, NULL);
-    if (!window)
-    {
-        std::cout << "Failed to create GLFW window" << std::endl;
-        glfwTerminate();
-        return -1;
-    }
-
-    /* Make the window's context current */
-    glfwMakeContextCurrent(window);
-    //glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glClearColor( 0.0f, 0.0f, 0.0f, 0.0f );
 
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
@@ -204,13 +204,16 @@ int main(int argc, char *argv[])
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     // get images
-    std::string filenames[4] = {"/usr/local/include/mocap_timing_marker0.png", "/usr/local/include/mocap_timing_marker1.png", "/usr/local/include/mocap_timing_marker2.png", "/usr/local/include/mocap_timing_marker3.png"};
+    std::string filenames[4] = {"/usr/local/include/timing_marker0.png",
+                                "/usr/local/include/timing_marker1.png",
+                                "/usr/local/include/timing_marker2.png",
+                                "/usr/local/include/timing_marker3.png"};
     int img_width[4] = {0,0,0,0};
     int img_height[4] = {0,0,0,0};
     GLuint images[4] = {0,0,0,0};
     for (uint i = 0; i < 4; ++i) {
         bool ret = LoadTextureFromFile(filenames[i].c_str(), images[i], img_width[i], img_height[i]);
-        //std::cout << "i: " << i << ", fn: " << filenames[i] << ", width: " << img_width[i] << ", height: " << img_height[i] << std::endl;
+        (void)ret; // Suppress unused variable warning
         IM_ASSERT(ret);
     }
 
@@ -302,7 +305,7 @@ int main(int argc, char *argv[])
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
     float marker_verts[] = {
-        // planar coordinate x,y,z         // texture coordinate u,v
+        // planar coordinate x,y,z             // texture coordinate u,v
         // top left square
         left_bot_outer, right_top_outer, 0.0f, /*top l*/ 0.0f, 0.0f, /*bot l*/
         left_bot_outer, right_top_inner, 0.0f, /*bot l*/ 0.0f, 1.0f, /*top l*/
@@ -443,9 +446,7 @@ int main(int argc, char *argv[])
     glfwSwapInterval(-1);
 
     // imgui variables
-    //ImFont *font_medium = AddDefaultFont(13);
     ImFont *font_large = AddDefaultFont(64);
-    //ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
     ImVec4 clear_color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
     bool win_open = true;
     // timing variables
@@ -478,6 +479,7 @@ int main(int argc, char *argv[])
             //static float f = 0.0f;
             static int counter = 0;
 
+            ImFont *font_medium = AddDefaultFont(13);
             ImGui::PushFont(font_medium);
             ImGui::Begin("Analysis"); // Create a window and append into it.
 
@@ -507,14 +509,6 @@ int main(int argc, char *argv[])
             ImGui::PopFont();
             ImGui::End();
         }
-        /*
-        { // testing adding an image
-            ImGui::Begin("OpenGL Texture Text");
-            ImGui::Text("size = %d x %d", img_width[0], img_height[0]);
-            ImGui::Image((void*)(intptr_t)images[0], ImVec2(img_width[0], img_height[0]));
-            ImGui::End();
-        }
-        */
 
         /* Render here */
         // imgui rendering
