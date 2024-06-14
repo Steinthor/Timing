@@ -10,9 +10,9 @@ jobs:
       - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
       - name: install necessary packages for openGL
         run: |
-          apt-get install freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libglfw3-dev
+          sudo apt-get install freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libglfw3-dev
       - name: install GLFW package
-        run: apt-get install libglfw3-dev
+        run: sudo apt-get install libglfw3-dev
       - name: List files in the repository
         run: |
           ls ${{ github.workspace }}
