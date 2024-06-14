@@ -21,7 +21,7 @@ jobs:
       - name: generate cmake code
         run: cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build
       - run: cd ${{ github.workspace }}/build
-      - run: make
+      - run: make -C ${{ github.workspace }}/build
       - name: check timing version
         run: ${{ github.workspace }}/build/timing -v
 # need c++ compiler?: apt-get install g++
