@@ -6,6 +6,10 @@ Version: 0.0.1
 
 Tested on Ubuntu and WSL Ubuntu.
 
+## Status
+
+![example workflow](https://github.com/Steinthor/Timing/blob/main/.github/workflows/github-actions.yml/badge.svg)
+
 ## Licences ##
 
 * external/GL: public domain
