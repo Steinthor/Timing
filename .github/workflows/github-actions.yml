@@ -1,6 +1,10 @@
-name: github-actions
-run-name: ${{ github.actor }} is testing GitHub Actions
-on: [push]
+name: Cmake compilation
+run-name: ${{ github.actor }} - Cmake compilation
+on:
+  push:
+    branches: [ $default-branch ]
+  pull_request:
+    branches: [ $default-branch ]
 jobs:
   compile_timing_app:
     runs-on: ubuntu-latest
@@ -24,4 +28,3 @@ jobs:
       - run: make -C ${{ github.workspace }}/build
       - name: check timing version
         run: ${{ github.workspace }}/build/timing -v
-# need c++ compiler?: apt-get install g++
