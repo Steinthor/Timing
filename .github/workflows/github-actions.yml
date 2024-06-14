@@ -2,12 +2,20 @@ name: github-actions
 run-name: ${{ github.actor }} is testing GitHub Actions
 on: [push]
 jobs:
-  check-bats-version:
+  compile_timing_app:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: npm install -g bats
-      - run: bats -v
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
+      - name: List files in the repository
+        run: |
+          ls ${{ github.workspace }}
+      - name: create a build directory
+        run: mkdir ${{ github.workspace }}/build
+      - name: generate cmake code
+        run: cd ${{ github.workspace }}/build
+      - run: cmake ..
+      - run: make
+      - name: check timing version
+        run: ./timing -v
