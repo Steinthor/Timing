@@ -14,8 +14,8 @@ jobs:
       - name: create a build directory
         run: mkdir ${{ github.workspace }}/build
       - name: generate cmake code
-        run: cd ${{ github.workspace }}/build
-      - run: cmake ..
+        run: cmake -S ${{ github.workspace }} -B ${{ github.workspace }}/build
+      - run: cd ${{ github.workspace }}/build
       - run: make
       - name: check timing version
-        run: ./timing -v
+        run: ${{ github.workspace }}/build/timing -v
