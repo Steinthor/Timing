@@ -8,7 +8,7 @@ Tested on Ubuntu and WSL Ubuntu.
 
 ## Status
 
-![example workflow](https://github.com/Steinthor/Timing/blob/main/.github/workflows/github-actions.yml/badge.svg)
+[![Cmake compilation](https://github.com/Steinthor/Timing/actions/workflows/github-actions.yml/badge.svg)](https://github.com/Steinthor/Timing/actions/workflows/github-actions.yml)
 
 ## Licences ##
 
