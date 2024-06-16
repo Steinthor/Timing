@@ -4,7 +4,7 @@ Timing app and detector script to sync cameras together
 
 Version: 0.0.1
 
-Tested on Ubuntu and WSL Ubuntu.
+Tested on Ubuntu and WSL Ubuntu.  For Vsync to work through WSL you need to run it in full screen.
 
 ## Status
 
