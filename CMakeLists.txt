@@ -4,7 +4,7 @@ project(timing VERSION 0.1.1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_CXX_FLAGS "-O3 -Wall")
+set(CMAKE_CXX_FLAGS "-O3 -Wall -no-pie")
 
 include_directories(include)
 include_directories(${CMAKE_BINARY_DIR}/generated)
